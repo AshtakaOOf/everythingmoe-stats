@@ -1,0 +1,41 @@
+@import "tailwindcss";
+/* Inter latin subset, wght 400-600 */
+@font-face { font-family: "Inter"; font-style: normal; font-weight: 400 600; font-display: swap; src: url("./assets/inter-subset.woff2") format("woff2"); }
+@custom-variant hc (&:where(.hc, .hc *));
+@theme {
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --color-base: #161616; --color-panel: #202020; --color-raised: #272727; --color-sunken: #1b1b1b;
+  --color-line: #2b2b2b; --color-line-strong: #383838;
+  --color-ink: #e7e7e7; --color-ink-2: #a5a5a5; --color-ink-3: #6f6f6f;
+  --color-pos: #63c08f; --color-neg: #e5675f;
+}
+/* high contrast palette */
+.hc {
+  --color-base: #000; --color-panel: #111; --color-raised: #1f1f1f; --color-sunken: #000;
+  --color-line: #5a5a5a; --color-line-strong: #8a8a8a;
+  --color-ink: #fff; --color-ink-2: #e0e0e0; --color-ink-3: #b8b8b8;
+  --color-pos: #7ee0ab; --color-neg: #ff8a82;
+}
+@layer base {
+  html { color-scheme: dark; background: var(--color-base); scroll-behavior: smooth; scroll-padding-top: var(--hdr); }
+  body { color: var(--color-ink); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
+  ::selection { background: #3a3a3a; color: #fff; }
+  :focus-visible { outline: 2px solid #5b9cf6; outline-offset: 1px; }
+  button { cursor: pointer; }
+  summary { cursor: pointer; list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+}
+/* header + pinned bar heights */
+:root { --hdr: 84px; --bar: 100px; }
+@media (min-width: 640px) { :root { --bar: 66px; } }
+@media (min-width: 1024px) { :root { --hdr: 48px; } }
+.panel { scroll-margin-top: 12px; }
+html.pinned { scroll-padding-top: calc(var(--hdr) + var(--bar)); }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+* { scrollbar-width: thin; scrollbar-color: #3a3a3a transparent; }
+.num { font-variant-numeric: tabular-nums; }
+@layer components {
+  .panel { @apply flex min-w-0 flex-col rounded-[3px] border border-line bg-panel max-sm:rounded-none max-sm:border-x-0; }
+  .pill { @apply rounded-[3px] border px-2 py-0.5 text-[11px]; }
+}

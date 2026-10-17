@@ -1,0 +1,7 @@
+node_modules
+dist
+
+.cache
+
+src/stats.json
+src/icons.js

@@ -1,0 +1,64 @@
+// Build-time fetch of stats data into src/stats.json.
+import { writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
+const BASE = "https://everythingmoe.com/data/cache";
+const MAX_MISS = 7, CONCURRENCY = 3, RETRIES = 5, START = Date.parse("2020-01-01");
+const CACHE = new URL("../.cache/", import.meta.url);
+mkdirSync(CACHE, { recursive: true });
+const MISS = "__404__";
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const fromCache = (p) => { const b = readFileSync(p); return b.toString() === MISS ? null : b; };
+async function get(url, file, immutable) {
+  const p = new URL(file, CACHE);
+  if (immutable && existsSync(p)) return fromCache(p);
+  for (let i = 0; ; i++) {
+    try {
+      const r = await fetch(url, { signal: AbortSignal.timeout(30000) });
+      if (r.status === 404) { if (immutable) writeFileSync(p, MISS); return null; }
+      if ((r.status === 429 || r.status >= 500) && i < RETRIES) {
+        const ra = Number(r.headers.get("retry-after"));
+        await sleep(ra > 0 ? ra * 1000 : 500 * 2 ** i + Math.random() * 250);
+        continue;
+      }
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const b = Buffer.from(await r.arrayBuffer());
+      writeFileSync(p, b);
+      return b;
+    } catch (e) {
+      if (i < RETRIES && e.name === "TimeoutError") { await sleep(500 * 2 ** i); continue; }
+      if (existsSync(p)) { console.warn(`! ${url}: ${e.message}, using cache`); return fromCache(p); }
+      throw new Error(`${url}: ${e.message}`); // don't silently treat errors as missing days
+    }
+  }
+}
+const ymd = (t) => new Date(t).toISOString().slice(0, 10);
+const today = Date.parse(ymd(Date.now()));
+const byDate = new Map(), missing = [];
+let miss = 0, t = today;
+while (miss < MAX_MISS && t >= START) {
+  const batch = [];
+  for (let i = 0; i < CONCURRENCY && t >= START; i++, t -= 864e5) batch.push(t);
+  const res = await Promise.all(batch.map(async (d) => {
+    const k = ymd(d).replaceAll("-", "");
+    const b = await get(`${BASE}/statshistory/${k}.json`, `day-${k}.json`, d < today);
+    try { return b && JSON.parse(b); } catch { return null; }
+  }));
+  for (let i = 0; i < batch.length; i++) {
+    if (res[i] && typeof res[i] === "object") { byDate.set(ymd(batch[i]), res[i]); miss = 0; }
+    else { missing.push(ymd(batch[i])); if (++miss >= MAX_MISS) break; }
+  }
+}
+let live = null;
+try { const b = await get(`${BASE}/site-stats.json`, "site-stats.json", false); if (b) live = JSON.parse(b); } catch (e) { console.warn("! live totals:", e.message); }
+if (!byDate.size) throw new Error("No stats data available");
+const rows = [...byDate].sort((a, b) => a[0].localeCompare(b[0]));
+const first = rows[0][0];
+const gaps = missing.filter((d) => d > first);
+const keys = ["users", "comments", "reviews", "entries", "category"];
+const out = {
+  builtAt: new Date().toISOString(), keys,
+  dates: rows.map((r) => r[0]),
+  v: keys.map((k) => rows.map((r) => r[1][k] ?? null)),
+  live: live && { time: live.time ?? null, v: keys.map((k) => live[k] ?? null) },
+};
+writeFileSync(new URL("../src/stats.json", import.meta.url), JSON.stringify(out));
+console.log(`stats: ${rows.length} days, ${first} – ${rows.at(-1)[0]}; ${gaps.length} gap day(s)${gaps.length ? " [" + gaps.join(",") + "]" : ""}; live totals: ${live ? "yes" : "no"}`);
