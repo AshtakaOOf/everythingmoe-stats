@@ -1,7 +1,7 @@
 // Build-time fetch of stats data into src/stats.json.
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
 const BASE = "https://everythingmoe.com/data/cache";
-const MAX_MISS = 7, CONCURRENCY = 3, RETRIES = 5, START = Date.parse("2020-01-01");
+const MAX_MISS = 7, CONCURRENCY = 1, RETRIES = 8, GAP_MS = 400, MAX_WAIT = 60000, START = Date.parse("2020-01-01");
 const CACHE = new URL("../.cache/", import.meta.url);
 mkdirSync(CACHE, { recursive: true });
 const MISS = "__404__";
@@ -16,12 +16,13 @@ async function get(url, file, immutable) {
       if (r.status === 404) { if (immutable) writeFileSync(p, MISS); return null; }
       if ((r.status === 429 || r.status >= 500) && i < RETRIES) {
         const ra = Number(r.headers.get("retry-after"));
-        await sleep(ra > 0 ? ra * 1000 : 500 * 2 ** i + Math.random() * 250);
+        await sleep(Math.min(MAX_WAIT, ra > 0 ? ra * 1000 : 1000 * 2 ** i + Math.random() * 500));
         continue;
       }
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const b = Buffer.from(await r.arrayBuffer());
       writeFileSync(p, b);
+      await sleep(GAP_MS); // be polite to the server
       return b;
     } catch (e) {
       if (i < RETRIES && e.name === "TimeoutError") { await sleep(500 * 2 ** i); continue; }
