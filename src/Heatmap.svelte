@@ -34,7 +34,6 @@
     <span class="cal-window ml-1 font-mono text-[11px]">{month(ts[i0])} – {month(ts[i1])}</span>
     <span class="ml-auto text-[10px] text-ink-3">{m0 + 1}–{m0 + fit} of {MONTHS.length} months</span>
   </div>
-  <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
   <svg width={w} height={H} tabindex="0" class="block cursor-pointer touch-pan-y select-none" role="application" aria-label="Calendar heatmap (arrow keys change month)" onkeydown={key} onpointermove={move} onpointerdown={down} onpointerup={up} onpointerleave={() => (hi = null)}>
     {#each heads as i}<text x={pos(i)[0]} y="11" class="fill-ink-3 font-mono text-[10px]">{day(ts[i], false).split(" ")[0]}</text>{/each}
     {#each [0, 2, 4, 6] as r}<text x={L - 6} y={T + r * (cell + G) + cell / 2 + 3.5} text-anchor="end" class="fill-ink-3 font-mono text-[10px]">{WD[r]}</text>{/each}
