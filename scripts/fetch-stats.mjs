@@ -7,13 +7,19 @@ mkdirSync(CACHE, { recursive: true });
 const MISS = "__404__";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const fromCache = (p) => { const b = readFileSync(p); return b.toString() === MISS ? null : b; };
-async function get(url, file, immutable) {
+const isJson = (b) => { try { const j = JSON.parse(b); return j && typeof j === "object"; } catch { return false; } };
+const TRUST_404_AFTER = 30 * 864e5;
+async function get(url, file, immutable, day) {
   const p = new URL(file, CACHE);
-  if (immutable && existsSync(p)) return fromCache(p);
+  const old = day != null && Date.now() - day > TRUST_404_AFTER;
+  if (immutable && existsSync(p)) {
+    const b = fromCache(p);
+    if (b ? isJson(b) : old) return b; // re-fetch recent 404s and anything corrupt
+  }
   for (let i = 0; ; i++) {
     try {
       const r = await fetch(url, { signal: AbortSignal.timeout(30000) });
-      if (r.status === 404) { if (immutable) writeFileSync(p, MISS); return null; }
+      if (r.status === 404) { if (immutable && old) writeFileSync(p, MISS); return null; }
       if ((r.status === 429 || r.status >= 500) && i < RETRIES) {
         const ra = Number(r.headers.get("retry-after"));
         await sleep(Math.min(MAX_WAIT, ra > 0 ? ra * 1000 : 1000 * 2 ** i + Math.random() * 500));
@@ -21,6 +27,7 @@ async function get(url, file, immutable) {
       }
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const b = Buffer.from(await r.arrayBuffer());
+      if (!isJson(b)) throw new Error("not valid JSON (site down?)");
       writeFileSync(p, b);
       await sleep(GAP_MS); // be polite to the server
       return b;
@@ -40,7 +47,7 @@ while (miss < MAX_MISS && t >= START) {
   for (let i = 0; i < CONCURRENCY && t >= START; i++, t -= 864e5) batch.push(t);
   const res = await Promise.all(batch.map(async (d) => {
     const k = ymd(d).replaceAll("-", "");
-    const b = await get(`${BASE}/statshistory/${k}.json`, `day-${k}.json`, d < today);
+    const b = await get(`${BASE}/statshistory/${k}.json`, `day-${k}.json`, d < today, d);
     try { return b && JSON.parse(b); } catch { return null; }
   }));
   for (let i = 0; i < batch.length; i++) {
