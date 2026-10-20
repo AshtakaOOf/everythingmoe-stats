@@ -5,7 +5,8 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: "15 0 * * *" # 00:15 UTC
+    - cron: "0 3 * * *" # snapshot usually lands 02:30-05:00 UTC
+    - cron: "0 8 * * *" # catch-up run if the first was too early
   workflow_dispatch:
 
 jobs:
