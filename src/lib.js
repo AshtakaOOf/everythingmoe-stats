@@ -42,3 +42,4 @@ export function milestone(m) {
   return { step, v0, v1, mult: v1 / v0, pace, next, days, eta: days ? ts[n - 1] + days * DAY : null, prev: target, prevAt: v0 >= target ? null : last, prog: (v1 - target) / step };
 }
 export const live = S.live;
+export const annotations = (S.annotations ?? []).map((o) => ({ ...o, i: dates.findIndex((d) => d >= o.d) })).filter((o) => o.i >= 0 && o.d >= dates[0]);

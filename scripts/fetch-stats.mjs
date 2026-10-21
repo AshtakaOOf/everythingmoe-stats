@@ -57,6 +57,15 @@ while (miss < MAX_MISS && t >= START) {
 }
 let live = null;
 try { const b = await get(`${BASE}/site-stats.json`, "site-stats.json", false); if (b) live = JSON.parse(b); } catch (e) { console.warn("! live totals:", e.message); }
+let annotations = [];
+try {
+  const b = await get(`${BASE}/statshistory/annotation.json`, "annotation.json", false);
+  const j = b ? JSON.parse(b) : [];
+  if (Array.isArray(j)) annotations = j
+    .filter((o) => o && Number.isFinite(+o.time) && typeof o.name === "string" && o.name.trim())
+    .map((o) => ({ d: ymd(+o.time * 1000), time: +o.time, name: o.name.trim().slice(0, 80) }))
+    .sort((p, q) => p.time - q.time);
+} catch (e) { console.warn("! annotations:", e.message); }
 if (!byDate.size) throw new Error("No stats data available");
 const rows = [...byDate].sort((a, b) => a[0].localeCompare(b[0]));
 const first = rows[0][0];
@@ -67,6 +76,7 @@ const out = {
   dates: rows.map((r) => r[0]),
   v: keys.map((k) => rows.map((r) => r[1][k] ?? null)),
   live: live && { time: live.time ?? null, v: keys.map((k) => live[k] ?? null) },
+  annotations,
 };
 writeFileSync(new URL("../src/stats.json", import.meta.url), JSON.stringify(out));
-console.log(`stats: ${rows.length} days, ${first} – ${rows.at(-1)[0]}; ${gaps.length} gap day(s)${gaps.length ? " [" + gaps.join(",") + "]" : ""}; live totals: ${live ? "yes" : "no"}`);
+console.log(`stats: ${rows.length} days, ${first} – ${rows.at(-1)[0]}; ${gaps.length} gap day(s)${gaps.length ? " [" + gaps.join(",") + "]" : ""}; live totals: ${live ? "yes" : "no"}; ${annotations.length} annotation(s)`);

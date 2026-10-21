@@ -7,7 +7,7 @@
   import Logo from "./Logo.svelte";
   import RatioRow from "./RatioRow.svelte";
   import Heatmap from "./Heatmap.svelte";
-  import { metrics, growing, ts, dates, builtAt, live, fmt, sgn, compact, day, month, rolling, months, milestone, WD, DAY } from "./lib.js";
+  import { metrics, growing, ts, dates, builtAt, live, fmt, sgn, compact, day, month, rolling, months, milestone, WD, DAY, annotations } from "./lib.js";
 
   const N = ts.length, last = N - 1;
   const SECTIONS = [["overview", "Overview", "dashboard-outline"], ["trend", "Trend", "show-chart"], ["growth", "Growth", "trending-up"], ["calendar", "Calendar", "calendar-month-outline"], ["monthly", "Monthly", "table-chart-outline"], ["top", "Top days", "star-outline"], ["milestones", "Milestones", "flag-outline"], ["data", "Data", "database-outline"]];
@@ -55,6 +55,9 @@
     Object.assign(document.createElement("a"), { href: u, download: `everythingmoe-stats_${dates[a]}_${dates[b]}.csv` }).click();
     setTimeout(() => URL.revokeObjectURL(u), 1000);
   }
+  let showNotes = $state(true);
+  const notes = $derived(showNotes ? annotations : []);
+  function toggleNotes() { showNotes = !showNotes; try { localStorage.setItem("annotations", showNotes ? "1" : "0"); } catch {} }
   function toggleHc() { hc = !hc; document.documentElement.classList.toggle("hc", hc); try { localStorage.setItem("hc", hc ? "1" : "0"); } catch {} }
   // lock scroll-spy during programmatic jumps
   let lock = false;
@@ -70,7 +73,7 @@
 
   onMount(() => {
     hc = document.documentElement.classList.contains("hc");
-    try { pinned = localStorage.getItem("pinRange") === "1"; const n = localStorage.getItem("norm"); if (NORMS.some((o) => o[0] === n)) norm = n; } catch {}
+    try { pinned = localStorage.getItem("pinRange") === "1"; const n = localStorage.getItem("norm"); if (NORMS.some((o) => o[0] === n)) norm = n; showNotes = localStorage.getItem("annotations") !== "0"; } catch {}
     const mq = matchMedia("(prefers-contrast: more)");
     const onMq = () => { if (localStorage.getItem("hc") === null) { hc = mq.matches; document.documentElement.classList.toggle("hc", hc); } };
     mq.addEventListener("change", onMq);
@@ -85,6 +88,7 @@
       else if (e.key === "m") key = growing[(growing.indexOf(m) + 1) % growing.length]?.key ?? "users";
       else if (e.key === "h") toggleHc();
       else if (e.key === "f") togglePin();
+      else if (e.key === "a" && annotations.length) toggleNotes();
     };
     addEventListener("keydown", onKey);
     addEventListener("pointerup", () => (mDrag = null));
@@ -118,6 +122,7 @@
     <span class="hidden truncate text-[12px] text-ink-3 md:inline" title="Live totals checked {liveAt ?? 'at build'}">– data up to {day(ts[last])}, going back to {day(ts[0])}</span>
     <div class="ml-auto flex items-center gap-2">
       <button onclick={togglePin} aria-pressed={pinned} title={pinned ? "Dock range bar back into Overview (f)" : "Pin range bar under the header (f)"} class="inline-flex size-8 items-center justify-center rounded-[3px] border {pinned ? 'border-ink-2 text-ink' : 'border-line-strong text-ink-2 hover:text-ink'}"><Icon name={pinned ? "push-pin" : "push-pin-outline"} /></button>
+      {#if annotations.length}<button onclick={toggleNotes} aria-pressed={showNotes} title={showNotes ? "Hide chart annotations (a)" : "Show chart annotations (a)"} class="inline-flex size-8 items-center justify-center rounded-[3px] border {showNotes ? 'border-[#e06c6c]/60 bg-[#e06c6c]/10 text-[#e88a8a] hc:border-[#ff8f8f] hc:text-[#ff8f8f]' : 'border-line-strong text-ink-2 hover:text-ink'}"><Icon name={showNotes ? "chat-info" : "chat-info-outline"} /></button>{/if}
       <button onclick={toggleHc} aria-pressed={hc} title="High contrast (h)" class="inline-flex size-8 items-center justify-center rounded-[3px] border {hc ? 'border-ink-2 text-ink' : 'border-line-strong text-ink-2 hover:text-ink'}"><Icon name="contrast" /></button>
     </div>
   </div>
@@ -135,7 +140,7 @@
         <Icon name={ic} size={16} class={active === id ? "text-[#5b9cf6]" : "text-ink-3"} /><span class="flex-1">{l}</span><kbd class="font-mono text-[10px] text-ink-3">{i + 1}</kbd>
       </a>
     {/each}
-    <div class="mt-auto flex gap-2 px-3 text-[10px] leading-relaxed text-ink-3"><Icon name="keyboard-outline" size={14} /><div><kbd class="text-ink-2">1–8</kbd> jump – <kbd class="text-ink-2">j k</kbd> next/prev<br /><kbd class="text-ink-2">m</kbd> metric – <kbd class="text-ink-2">h</kbd> contrast – <kbd class="text-ink-2">f</kbd> float range</div></div>
+    <div class="mt-auto flex gap-2 px-3 text-[10px] leading-relaxed text-ink-3"><Icon name="keyboard-outline" size={14} /><div><kbd class="text-ink-2">1–8</kbd> jump – <kbd class="text-ink-2">j k</kbd> next/prev<br /><kbd class="text-ink-2">m</kbd> metric – <kbd class="text-ink-2">h</kbd> contrast<br /><kbd class="text-ink-2">f</kbd> float range{#if annotations.length}{" – "}<kbd class="text-ink-2">a</kbd> notes{/if}</div></div>
   </aside>
 
   <main class="min-w-0 flex-1 space-y-4 pb-10 {pinned ? "pt-[116px] sm:pt-[84px]" : "pt-4 sm:pt-6"}">
@@ -166,10 +171,10 @@
       {@render head(2, "show-chart", "Trend", m.label, "Total at each snapshot; bars = day-over-day change.", trendRight)}
       {#snippet trendRight()}<div class="flex flex-wrap items-center gap-2">{@render pills(metrics.map((x) => [x.key, x.label]), key, (v) => (key = v))}<label class="flex items-center gap-1.5 text-[11px] text-ink-2"><input type="checkbox" bind:checked={showAvg} class="accent-[#5b9cf6]" />7d avg</label></div>{/snippet}
       <div class="p-3 sm:p-4">
-        <Chart {a} {b} onselect={select} h={300} series={[{ v: m.v, color: m.color, label: m.label }]} bars={{ v: m.ch, color: m.color, f: (n) => sgn(n) }} />
+        <Chart {a} {b} {notes} onselect={select} h={300} series={[{ v: m.v, color: m.color, label: m.label }]} bars={{ v: m.ch, color: m.color, f: (n) => sgn(n) }} />
         {#if showAvg && !m.constant}
           <div class="mt-3 border-t border-line pt-2 font-mono text-[10px] uppercase tracking-wider text-ink-3">Daily Δ – 7-day avg</div>
-          <Chart {a} {b} onselect={select} h={100} zero series={[{ v: m.ch, color: m.color, thin: true, label: "Δ", f: (n) => sgn(n) }, { v: avg7, color: "var(--color-ink)", dash: true, label: "7d avg", f: (n) => sgn(n, 1) }]} />
+          <Chart {a} {b} {notes} onselect={select} h={100} zero series={[{ v: m.ch, color: m.color, thin: true, label: "Δ", f: (n) => sgn(n) }, { v: avg7, color: "var(--color-ink)", dash: true, label: "7d avg", f: (n) => sgn(n, 1) }]} />
         {/if}
       </div>
     </section>
@@ -179,7 +184,7 @@
         {@render head(3, "trending-up", "Growth", "since range start", "Change since the start of the selected range. Raw % exaggerates metrics that started small; Per user divides by users each day; Added shows absolute amounts.", growthRight)}
         {#snippet growthRight()}<div class="ml-auto shrink-0">{@render normPills()}</div>{/snippet}
         <div class="no-scrollbar flex h-8 items-center gap-3 overflow-x-auto whitespace-nowrap border-b border-line px-3 text-[11px] sm:px-4" aria-label="Legend">{#each growing as g}{@const off = norm === "user" && g.key === "users"}<span class="flex shrink-0 items-center gap-1.5 {off ? 'text-ink-3 opacity-50' : 'text-ink-2'}" title={off ? "Users per user is always 1 – hidden" : null}><span style="color:{g.color}"><Icon name={g.icon} size={14} /></span>{g.label}{norm === "user" && !off ? " / user" : ""}</span>{/each}</div>
-        <div class="p-3 sm:p-4"><Chart {a} {b} onselect={select} h={312} unit={norm === "abs" ? "" : "%"} endLabels series={rel} /></div>
+        <div class="p-3 sm:p-4"><Chart {a} {b} {notes} onselect={select} h={312} unit={norm === "abs" ? "" : "%"} endLabels series={rel} /></div>
       </section>
       <section class="panel" aria-label="Ratios">
         {@render head(3, "trending-up", "Ratios", "engagement", "Derived from totals, selected range.")}
@@ -280,6 +285,7 @@
         <ul class="space-y-0.5">
           <li><a class="text-ink-2 underline decoration-line-strong underline-offset-2 hover:text-ink" href="{DATA}/cache/statshistory/{dates[last].replaceAll('-', '')}.json">cache/statshistory/{dates[last].replaceAll('-', '')}.json</a></li>
           <li><a class="text-ink-2 underline decoration-line-strong underline-offset-2 hover:text-ink" href="{DATA}/cache/site-stats.json">cache/site-stats.json</a></li>
+          <li><a class="text-ink-2 underline decoration-line-strong underline-offset-2 hover:text-ink" href="{DATA}/cache/statshistory/annotation.json">cache/statshistory/annotation.json</a></li>
         </ul>
       </div>
       <p class="shrink-0">{N} snapshots – {day(ts[0])} – {day(ts[last])} – unofficial</p>
@@ -296,7 +302,7 @@
 {#snippet rangeBar()}
   <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3" title="Drag to select a range, drag the window to pan, arrow keys to move">
     {@render pills(RANGES.map((r) => [r[0], r[0]]), preset, (v) => setRange(RANGES.find((r) => r[0] === v)[1]))}
-    <div class="min-w-0 w-full flex-1"><Brush v={m.v} color={m.color} bind:a bind:b compact /></div>
+    <div class="min-w-0 w-full flex-1"><Brush v={m.v} color={m.color} {notes} bind:a bind:b compact /></div>
   </div>
 {/snippet}
 {#if pinned}

@@ -1,7 +1,7 @@
 <script>
   // lightweight SVG line chart with hover
   import { ts, day, ticks, fmt } from "./lib.js";
-  let { series, a = 0, b = ts.length - 1, h = 220, bars = null, zero = false, unit = "", endLabels = false, onselect = null } = $props();
+  let { series, a = 0, b = ts.length - 1, h = 220, bars = null, zero = false, unit = "", endLabels = false, onselect = null, notes = [] } = $props();
   let sel = $state(null); // [start, end] while dragging
   let w = $state(600), hi = $state(null);
   const P = $derived({ l: 54, r: endLabels ? 66 : 14, t: 14, b: 28 });
@@ -25,6 +25,16 @@
   });
   const yt = $derived(ticks(ext[0], ext[1]));
   const xt = $derived.by(() => { const n = Math.max(2, Math.floor(w / 110)); const st = Math.max(1, Math.ceil(idx.length / n)); return idx.filter((_, k) => k % st === 0); });
+  const vis = $derived.by(() => {
+    let edge = -Infinity;
+    return notes.filter((n) => n.i >= a && n.i <= b).map((n) => {
+      const nx = x(n.i), tw = n.name.length * 5.4, flip = nx + 6 + tw > w - 2;
+      const l0 = flip ? nx - 6 - tw : nx + 6, show = l0 > edge + 6 && l0 > 0;
+      if (show) edge = l0 + tw;
+      return { ...n, nx, flip, show };
+    });
+  });
+  const near = $derived(hi === null ? [] : vis.filter((n) => Math.abs(n.nx - x(hi)) < 5));
   const bmax = $derived(bars ? Math.max(1, ...idx.map((i) => Math.abs(bars.v[i]) || 0)) : 1);
   const at = (e) => { const px = e.clientX - e.currentTarget.getBoundingClientRect().left; return Math.max(a, Math.min(b, Math.round(a + ((px - P.l) / (w - P.l - P.r)) * (b - a)))); };
   function move(e) { hi = at(e); if (sel) sel = [sel[0], hi]; }
@@ -37,6 +47,7 @@
     {#if sel}{@const x0 = Math.min(x(sel[0]), x(sel[1]))}{@const x1 = Math.max(x(sel[0]), x(sel[1]))}<rect x={x0} width={x1 - x0} y={P.t} height={h - P.t} fill="#5b9cf6" opacity="0.18" /><line x1={x0} x2={x0} y1={P.t} y2={h} stroke="#5b9cf6" /><line x1={x1} x2={x1} y1={P.t} y2={h} stroke="#5b9cf6" />{#if Math.abs(sel[1] - sel[0]) >= 2}<text x={(x0 + x1) / 2} y={P.t + 10} text-anchor="middle" class="fill-ink font-mono text-[10px]">{day(ts[Math.min(...sel)], false)} – {day(ts[Math.max(...sel)], false)} ({Math.abs(sel[1] - sel[0])}d)</text>{/if}{/if}
     {#each yt as t}<line x1={P.l} x2={w - P.r} y1={y(t)} y2={y(t)} stroke={t === 0 ? "#3b3b3b" : "#2a2a2a"} class="hc:stroke-line-strong" /><text x={P.l - 10} y={y(t) + 3} text-anchor="end" class="fill-ink-3 font-mono text-[10px]">{Math.abs(t) >= 1e3 ? +(t / 1e3).toFixed(1) + "k" : t}{unit}</text>{/each}
     {#each xt as i}<text x={x(i)} y={H - 9} text-anchor="middle" class="fill-ink-3 font-mono text-[10px]">{day(ts[i], false)}</text>{/each}
+    {#each vis as n}<g class="pointer-events-none"><title>{n.name} ({day(Date.parse(n.d))})</title><line x1={n.nx} x2={n.nx} y1={P.t - 4} y2={H - P.b} stroke-dasharray="2 3" class="stroke-[#e06c6c] {near.includes(n) ? 'opacity-90' : 'opacity-55'} hc:stroke-[#ff8f8f] hc:opacity-100" /><rect x={n.nx - 2.5} y={P.t - 9} width="5" height="5" transform="rotate(45 {n.nx} {P.t - 6.5})" class="fill-[#e06c6c] opacity-80 hc:fill-[#ff8f8f] hc:opacity-100" />{#if n.show}<text x={n.flip ? n.nx - 6 : n.nx + 6} y={P.t - 3} text-anchor={n.flip ? "end" : "start"} class="fill-[#d77b7b] font-mono text-[9px] opacity-90 hc:fill-[#ffa3a3] hc:opacity-100">{n.name}</text>{/if}</g>{/each}
     {#each series as s}<path d={path(s.v)} fill="none" stroke-linejoin="round" stroke={s.color} stroke-width={s.thin ? 1.25 : 1.75} stroke-dasharray={s.dash ? "3 3" : null} opacity={s.thin ? 0.7 : 1} />{/each}
     {#if endLabels}{#each series as s, k}{#if Number.isFinite(s.v[b])}<rect x={x(b) - 3} y={y(s.v[b]) - 3} width="6" height="6" fill={s.color} /><text x={x(b) + 8} y={labelY[k] + 3.5} fill={s.color} class="font-mono text-[10px] font-medium">{s.f ? s.f(s.v[b]) : fmt(s.v[b])}</text>{/if}{/each}{/if}
     {#if bars}
@@ -50,6 +61,7 @@
       <div class="mb-1 font-mono text-ink-3">{day(ts[hi])}</div>
       {#each series.filter((s) => s.label) as s}<div class="flex justify-between gap-3"><span style="color:{s.color}">{s.label}</span><span class="num">{s.f ? s.f(s.v[hi]) : fmt(s.v[hi])}</span></div>{/each}
     {#if bars}<div class="flex justify-between gap-3 text-ink-2"><span>Δ day</span><span class="num">{bars.f(bars.v[hi])}</span></div>{/if}
+      {#each near as n}<div class="mt-1 flex items-center gap-1.5 border-t border-line pt-1 text-[#e88a8a] hc:text-[#ffa3a3]"><span class="inline-block size-1.5 rotate-45 bg-[#e06c6c] hc:bg-[#ff8f8f]"></span>{n.name}{#if n.i !== hi}<span class="ml-auto font-mono text-[10px] text-ink-3">{day(Date.parse(n.d), false)}</span>{/if}</div>{/each}
     </div>
   {/if}
 </div>

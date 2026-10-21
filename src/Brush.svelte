@@ -1,7 +1,7 @@
 <script>
   // range brush: select, pan, resize edges
   import { ts, day } from "./lib.js";
-  let { v, color, a = $bindable(), b = $bindable(), min = 2, compact = false } = $props();
+  let { v, color, a = $bindable(), b = $bindable(), min = 2, compact = false, notes = [] } = $props();
   let w = $state(600), drag = null;
   const H = $derived(compact ? 30 : 46);
   const n = ts.length - 1;
@@ -52,6 +52,7 @@
       <path d={area} fill={color} class="opacity-60 hc:opacity-100" />
       <path d={line} fill="none" stroke={color} stroke-width="1.5" />
     </g>
+    {#each notes as n}<line x1={x(n.i)} x2={x(n.i)} y2={H} stroke-dasharray="2 2" class="pointer-events-none stroke-[#e06c6c] opacity-60 hc:stroke-[#ff8f8f] hc:opacity-100"><title>{n.name}</title></line>{/each}
     <rect x={x(a)} width={x(b) - x(a)} height={H - 1} y="0.5" fill="none" class="stroke-ink-2 hc:stroke-ink hc:[stroke-width:2]" />
     <rect x={x(a) - 2} width="4" y={H * 0.2} height={H * 0.6} rx="1" class="fill-ink cursor-ew-resize hc:stroke-base hc:[stroke-width:1.5] hc:[transform:scaleX(1.6)] hc:[transform-box:fill-box] hc:[transform-origin:center]" />
     <rect x={x(b) - 2} width="4" y={H * 0.2} height={H * 0.6} rx="1" class="fill-ink cursor-ew-resize hc:stroke-base hc:[stroke-width:1.5] hc:[transform:scaleX(1.6)] hc:[transform-box:fill-box] hc:[transform-origin:center]" />
