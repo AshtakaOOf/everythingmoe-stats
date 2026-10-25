@@ -149,7 +149,7 @@
         <h2 class="text-[18px] text-ink">Overview</h2><span class="text-[13px] text-ink-3">as of {day(ts[b], false)}</span>
       </div>
       <p class="px-3 sm:px-4 py-1.5 text-center text-[12px] leading-snug text-ink-2">Daily history of <a href="https://everythingmoe.com" class="text-ink underline decoration-line-strong underline-offset-2">EverythingMoe</a>'s public site stats – how its users, comments, reviews, listed entries and categories grow over time. Pick a card to focus the charts; drag on any chart to set the date range.</p>
-      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+      <div class="-mr-px grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
         {#each metrics as x}
           {@const d = x.v[b] - x.v[a]}
           {@const lv = live?.v[metrics.indexOf(x)]}
