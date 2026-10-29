@@ -48,7 +48,7 @@
   {#if hi !== null}
     {@const [cx, cy] = pos(hi)}
     <div class="pointer-events-none absolute z-10 rounded-[3px] border border-line-strong bg-raised/95 px-2 py-1 text-[11px] shadow-lg" style="left:{Math.min(cx + cell + 6, w - 140)}px;top:{cy + 30}px">
-      <div class="font-mono text-ink-3">{day(ts[hi])}</div><div class="num"><span style="color:{m.color}">{m.label}</span> {sgn(m.ch[hi])}</div>
+      <div class="font-mono text-ink-3">{day(ts[hi])}</div><div class="num"><span style="color:{m.color}">{m.label}</span> {hi > 0 && hi <= m.first ? "no data" : sgn(m.ch[hi])}</div>
     </div>
   {/if}
   <div class="mt-2 flex items-center gap-1 text-[10px] text-ink-3">less {#each [0.2, 0.45, 0.7, 1] as o}<span class="size-2.5 rounded-[2px]" style="background:{m.color};opacity:{o}"></span>{/each} more <span class="ml-auto">click = week - press and drag = span</span></div>

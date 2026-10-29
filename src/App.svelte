@@ -33,16 +33,19 @@
   function setNorm(v) { norm = v; try { localStorage.setItem("norm", v); } catch {} }
   const U = metrics.find((x) => x.key === "users").v;
   const nv = (x) => (norm === "user" ? x.v.map((y, i) => y / U[i]) : x.v);
-  const pct = (v) => ((v[b] - v[a]) / v[a]) * 100;
-  const rel = $derived(growing.filter((g) => norm !== "user" || g.key !== "users").map((g) => { const v = nv(g); return { label: g.label + (norm === "user" ? " / user" : ""), color: g.color, icon: g.icon, v: norm === "abs" ? v.map((x) => x - v[a]) : v.map((x) => ((x - v[a]) / v[a]) * 100), f: norm === "abs" ? (n) => sgn(n) : (n) => sgn(n, 1) + "%" }; }));
-  const RATIOS = [["Comments / user", "comments", "users", 2], ["Reviews / user", "reviews", "users", 3], ["Comments / entry", "comments", "entries", 2], ["Reviews / entry", "reviews", "entries", 2]];
+  // metrics added later (threads) start at their first day
+  const s0 = (x) => Math.max(a, x.first);
+  const pct = (v, s = a) => (v[s] ? ((v[b] - v[s]) / v[s]) * 100 : NaN);
+  const rel = $derived(growing.filter((g) => norm !== "user" || g.key !== "users").map((g) => { const v = nv(g), s = s0(g), v0 = v[s]; return { label: g.label + (norm === "user" ? " / user" : ""), color: g.color, icon: g.icon, v: v.map((x, i) => (i < s ? NaN : norm === "abs" ? x - v0 : v0 ? ((x - v0) / v0) * 100 : NaN)), f: norm === "abs" ? (n) => sgn(n) : (n) => sgn(n, 1) + "%" }; }));
+  const RATIOS = [["Comments / user", "comments", "users", 2], ["Reviews / user", "reviews", "users", 3], ["Threads / 1k users", "thread", "users", 1, 1e3], ["Comments / entry", "comments", "entries", 2], ["Reviews / entry", "reviews", "entries", 2]];
   const mIcon = Object.fromEntries(metrics.map((x) => [x.key, [x.icon, x.color]]));
   const get = (k) => metrics.find((x) => x.key === k);
   const mon = months();
-  const monMax = Object.fromEntries(metrics.map((x) => [x.key, Math.max(1, ...mon.map((o) => Math.abs(o.sums[x.key] / o.days)))]));
+  const monMax = Object.fromEntries(metrics.map((x) => [x.key, Math.max(1, ...mon.filter((o) => o.n[x.key]).map((o) => Math.abs(o.sums[x.key] / o.n[x.key])))]));
   const top = $derived(Array.from({ length: N - 1 }, (_, i) => i + 1).filter((i) => m.ch[i] > 0).sort((p, q) => m.ch[q] - m.ch[p]).slice(0, 8));
   const med = $derived.by(() => { const s = m.ch.slice(1).filter(Number.isFinite).sort((p, q) => p - q); return s[s.length >> 1] || 1; });
-  const wd = $derived.by(() => { const s = Array(7).fill(0), c = Array(7).fill(0); for (let i = Math.max(1, a); i <= b; i++) { const k = (new Date(ts[i] - DAY).getUTCDay() + 6) % 7; s[k] += m.ch[i]; c[k]++; } return s.map((x, i) => x / (c[i] || 1)); });
+  const wd = $derived.by(() => { const s = Array(7).fill(0), c = Array(7).fill(0); for (let i = Math.max(1, a); i <= b; i++) { if (!Number.isFinite(m.ch[i])) continue; const k = (new Date(ts[i] - DAY).getUTCDay() + 6) % 7; s[k] += m.ch[i]; c[k]++; } return s.map((x, i) => (c[i] ? x / c[i] : NaN)); });
+  const wdMax = $derived(Math.max(0, ...wd.filter(Number.isFinite)));
   let sortDesc = $state(true);
   const tableRows = $derived.by(() => { const r = Array.from({ length: b - a + 1 }, (_, i) => a + i); return sortDesc ? r.reverse() : r; });
   const liveAt = live?.time ? new Date(live.time * 1000).toISOString().slice(11, 16) + " UTC" : null;
@@ -50,7 +53,7 @@
 
   function csv() {
     const head = ["date", ...metrics.map((x) => x.key)].join(",");
-    const body = tableRows.slice().sort((p, q) => p - q).map((i) => [dates[i], ...metrics.map((x) => x.v[i])].join(",")).join("\n");
+    const body = tableRows.slice().sort((p, q) => p - q).map((i) => [dates[i], ...metrics.map((x) => (Number.isFinite(x.v[i]) ? x.v[i] : ""))].join(",")).join("\n");
     const u = URL.createObjectURL(new Blob([head + "\n" + body], { type: "text/csv" }));
     Object.assign(document.createElement("a"), { href: u, download: `everythingmoe-stats_${dates[a]}_${dates[b]}.csv` }).click();
     setTimeout(() => URL.revokeObjectURL(u), 1000);
@@ -148,18 +151,19 @@
       <div class="flex items-baseline justify-center gap-2 border-b border-line bg-raised px-3 sm:px-4 py-1.5 text-center" title="Totals at the end of the selected range; change over the range.">
         <h2 class="text-[18px] text-ink">Overview</h2><span class="text-[13px] text-ink-3">as of {day(ts[b], false)}</span>
       </div>
-      <p class="px-3 sm:px-4 py-1.5 text-center text-[12px] leading-snug text-ink-2">Daily history of <a href="https://everythingmoe.com" class="text-ink underline decoration-line-strong underline-offset-2">EverythingMoe</a>'s public site stats – how its users, comments, reviews, listed entries and categories grow over time. Pick a card to focus the charts; drag on any chart to set the date range.</p>
-      <div class="-mr-px grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+      <p class="px-3 sm:px-4 py-1.5 text-center text-[12px] leading-snug text-ink-2">Daily history of <a href="https://everythingmoe.com" class="text-ink underline decoration-line-strong underline-offset-2">EverythingMoe</a>'s public site stats – how its users, comments, reviews, forum threads, listed entries and categories grow over time. Pick a card to focus the charts; drag on any chart to set the date range.</p>
+      <div class="-mr-px grid grid-cols-2 sm:grid-cols-3 {metrics.length > 5 ? "xl:grid-cols-6" : "lg:grid-cols-5"}">
         {#each metrics as x}
-          {@const d = x.v[b] - x.v[a]}
+          {@const s = s0(x)}
+          {@const d = x.v[b] - x.v[s]}
           {@const lv = live?.v[metrics.indexOf(x)]}
-          <button onclick={() => (key = x.key)} aria-pressed={key === x.key} title="{x.desc} - click to focus charts" class="group relative flex min-w-0 flex-col border-r border-t border-line px-3 py-2 text-left transition-colors {x.constant ? 'col-span-2 justify-center sm:col-span-1' : ''} {key === x.key ? 'bg-raised' : 'hover:bg-[#242424] hc:hover:bg-raised'}">
+          <button onclick={() => (key = x.key)} aria-pressed={key === x.key} title="{x.desc} - click to focus charts" class="group relative flex min-w-0 flex-col border-r border-t border-line px-3 py-2 text-left transition-colors {x.constant ? `justify-center ${metrics.length % 2 ? "col-span-2 sm:col-span-1" : ""}` : ''} {key === x.key ? 'bg-raised' : 'hover:bg-[#242424] hc:hover:bg-raised'}">
             {#if key === x.key}<span class="absolute inset-x-0 top-0 h-[2px]" style="background:{x.color}"></span>{/if}
             <div class="flex items-center gap-2 text-[13px] text-ink-2"><span style="color:{x.color}"><Icon name={x.icon} size={16} /></span>{x.label}</div>
             <div class="num mt-0.5 text-[22px] leading-tight">{fmt(x.v[b])}</div>
             {#if x.constant}<div class="mt-1 text-[12px] text-ink-3">steady</div>
-            {:else}{@const off = norm === "user" && x.key === "users"}{@const pv = nv(x)}<div class="num mt-1 truncate whitespace-nowrap text-[12px] {off ? 'text-ink-3' : (norm === "user" ? pct(pv) : d) > 0 ? 'text-pos' : (norm === "user" ? pct(pv) : d) < 0 ? 'text-neg' : 'text-ink-3'}" title={off ? "Users per user is always 1" : NORMS.find((o) => o[0] === norm)[3]}>{#if norm === "abs"}{sgn(d)} added{:else if off}{sgn(d)} - n/a{:else if norm === "user"}{pv[b].toFixed(3)}/user - {sgn(pct(pv), 1)}%{:else}{sgn(d)} - {sgn(pct(x.v), 1)}%{/if}</div>
-              <div class="num text-[11px] text-ink-3">{lv != null && b === last ? `now ${fmt(lv)}` : `${sgn(d / span, 1)}/day`}</div>
+            {:else}{@const off = norm === "user" && x.key === "users"}{@const pv = nv(x)}{@const late = s > a}<div class="num mt-1 truncate whitespace-nowrap text-[12px] {off ? 'text-ink-3' : (norm === "user" ? pct(pv, s) : d) > 0 ? 'text-pos' : (norm === "user" ? pct(pv, s) : d) < 0 ? 'text-neg' : 'text-ink-3'}" title={off ? "Users per user is always 1" : NORMS.find((o) => o[0] === norm)[3] + (late ? ` (tracked since ${x.since})` : "")}>{#if s > b}no data before {x.since}{:else if norm === "abs"}{sgn(d)} added{:else if off}{sgn(d)} - n/a{:else if norm === "user"}{fmt(pv[b], 3)}/user - {sgn(pct(pv, s), 1)}%{:else}{sgn(d)} - {sgn(pct(x.v, s), 1)}%{/if}</div>
+              <div class="num truncate whitespace-nowrap text-[11px] text-ink-3">{lv != null && b === last ? `now ${fmt(lv)}` : s > b ? "—" : `${sgn(d / Math.max(1, (ts[b] - ts[s]) / DAY), 1)}/day`}{#if late && s <= b} - since {x.since}{/if}</div>
               <div class="mt-1 h-5 opacity-80 group-hover:opacity-100"><Spark v={x.v.slice(a, b + 1)} color={x.color} /></div>{/if}
           </button>
         {/each}
@@ -171,10 +175,10 @@
       {@render head(2, "show-chart", "Trend", m.label, "Total at each snapshot; bars = day-over-day change.", trendRight)}
       {#snippet trendRight()}<div class="flex flex-wrap items-center gap-2">{@render pills(metrics.map((x) => [x.key, x.label]), key, (v) => (key = v))}<label class="flex items-center gap-1.5 text-[11px] text-ink-2"><input type="checkbox" bind:checked={showAvg} class="accent-[#5b9cf6]" />7d avg</label></div>{/snippet}
       <div class="p-3 sm:p-4">
-        <Chart {a} {b} {notes} onselect={select} h={300} series={[{ v: m.v, color: m.color, label: m.label }]} bars={{ v: m.ch, color: m.color, f: (n) => sgn(n) }} />
+        <Chart {a} {b} {notes} onselect={select} from={m.first} since={m.since} h={300} series={[{ v: m.v, color: m.color, label: m.label }]} bars={{ v: m.ch, color: m.color, f: (n) => sgn(n) }} />
         {#if showAvg && !m.constant}
           <div class="mt-3 border-t border-line pt-2 font-mono text-[10px] uppercase tracking-wider text-ink-3">Daily Δ – 7-day avg</div>
-          <Chart {a} {b} {notes} onselect={select} h={100} zero series={[{ v: m.ch, color: m.color, thin: true, label: "Δ", f: (n) => sgn(n) }, { v: avg7, color: "var(--color-ink)", dash: true, label: "7d avg", f: (n) => sgn(n, 1) }]} />
+          <Chart {a} {b} {notes} onselect={select} from={m.first} since={m.since} h={100} zero series={[{ v: m.ch, color: m.color, thin: true, label: "Δ", f: (n) => sgn(n) }, { v: avg7, color: "var(--color-ink)", dash: true, label: "7d avg", f: (n) => sgn(n, 1) }]} />
         {/if}
       </div>
     </section>
@@ -183,13 +187,13 @@
       <section id="growth" class="panel xl:col-span-2">
         {@render head(3, "trending-up", "Growth", "since range start", "Change since the start of the selected range. Raw % exaggerates metrics that started small; Per user divides by users each day; Added shows absolute amounts.", growthRight)}
         {#snippet growthRight()}<div class="ml-auto shrink-0">{@render normPills()}</div>{/snippet}
-        <div class="no-scrollbar flex h-8 items-center gap-3 overflow-x-auto whitespace-nowrap border-b border-line px-3 text-[11px] sm:px-4" aria-label="Legend">{#each growing as g}{@const off = norm === "user" && g.key === "users"}<span class="flex shrink-0 items-center gap-1.5 {off ? 'text-ink-3 opacity-50' : 'text-ink-2'}" title={off ? "Users per user is always 1 – hidden" : null}><span style="color:{g.color}"><Icon name={g.icon} size={14} /></span>{g.label}{norm === "user" && !off ? " / user" : ""}</span>{/each}</div>
+        <div class="no-scrollbar flex h-8 items-center gap-3 overflow-x-auto whitespace-nowrap border-b border-line px-3 text-[11px] sm:px-4" aria-label="Legend">{#each growing as g}{@const off = norm === "user" && g.key === "users"}<span class="flex shrink-0 items-center gap-1.5 {off ? 'text-ink-3 opacity-50' : 'text-ink-2'}" title={off ? "Users per user is always 1 – hidden" : null}><span style="color:{g.color}"><Icon name={g.icon} size={14} /></span>{g.label}{norm === "user" && !off ? " / user" : ""}{#if g.first > a}<span class="text-ink-3" title="No {g.label.toLowerCase()} data before {g.since}; growth starts there">(since {g.since})</span>{/if}</span>{/each}</div>
         <div class="p-3 sm:p-4"><Chart {a} {b} {notes} onselect={select} h={312} unit={norm === "abs" ? "" : "%"} endLabels series={rel} /></div>
       </section>
       <section class="panel" aria-label="Ratios">
         {@render head(3, "trending-up", "Ratios", "engagement", "Derived from totals, selected range.")}
         <div class="divide-y divide-line px-3 sm:px-4 py-1">
-          {#each RATIOS as [l, n, d, dg]}<RatioRow {norm} label={l} v={get(n).v.map((x, i) => x / get(d).v[i])} color={get(n).color} digits={dg} {a} {b} bind:hover={ratioHover} onselect={select} />{/each}
+          {#each RATIOS as [l, n, d, dg, k = 1]}<RatioRow {norm} label={l} v={get(n).v.map((x, i) => (x * k) / get(d).v[i])} color={get(n).color} digits={dg} since={get(n).since} {a} {b} bind:hover={ratioHover} onselect={select} />{/each}
         </div>
       </section>
     </div>
@@ -204,11 +208,11 @@
         {@render head(4, "calendar-month-outline", "Weekdays", "avg Δ", "Average daily change by UTC weekday, selected range.")}
         <div class="flex flex-1 flex-col justify-between gap-1.5 p-3 sm:p-4">
           {#each wd as v, i}
-            {@const mx = Math.max(...wd)}
-            <div class="flex flex-1 items-center gap-3 text-[13px]" title="{WD[i]}: {v.toFixed(1)} {m.label.toLowerCase()} per day on average">
+            {@const mx = wdMax}
+            <div class="flex flex-1 items-center gap-3 text-[13px]" title="{WD[i]}: {fmt(v, 1)} {m.label.toLowerCase()} per day on average">
               <span class="w-9 font-mono text-[12px] {v === mx ? 'text-ink' : 'text-ink-3'}">{WD[i]}</span>
-              <div class="h-full max-h-7 min-h-3 flex-1 rounded-[3px] bg-sunken"><div class="h-full rounded-[3px]" style="width:{(Math.max(0, v) / (mx || 1)) * 100}%;background:{m.color};opacity:{v === mx ? 1 : 0.6}"></div></div>
-              <span class="num w-12 text-right {v === mx ? 'font-semibold text-ink' : 'text-ink-2'}">{v.toFixed(1)}</span>
+              <div class="h-full max-h-7 min-h-3 flex-1 rounded-[3px] bg-sunken"><div class="h-full rounded-[3px]" style="width:{(Math.max(0, v || 0) / (mx || 1)) * 100}%;background:{m.color};opacity:{v === mx ? 1 : 0.6}"></div></div>
+              <span class="num w-12 text-right {v === mx ? 'font-semibold text-ink' : 'text-ink-2'}">{fmt(v, 1)}</span>
             </div>
           {/each}
         </div>
@@ -220,12 +224,12 @@
         {@render head(5, "table-chart-outline", "Monthly", "net change", "Net change per calendar month (UTC). Bar = average per day vs best month.")}
         <div class="overflow-x-auto">
           <table class="w-full text-[12px]">
-            <thead><tr class="border-b border-line text-left font-mono text-[10px] uppercase tracking-wider text-ink-3"><th class="px-3 sm:px-4 py-2 font-normal">Month</th>{#each growing as x}<th class="px-3 sm:px-4 py-2 text-right font-normal" style="color:{x.color}"><span class="inline-flex items-center gap-1"><Icon name={x.icon} size={13} />{x.label}</span></th>{/each}</tr></thead>
+            <thead><tr class="border-b border-line text-left font-mono text-[10px] uppercase tracking-wider text-ink-3"><th class="px-3 sm:px-4 py-2 font-normal">Month</th>{#each growing as x}<th class="px-3 py-2 text-right font-normal {growing.length > 4 ? '' : 'sm:px-4'}" title={x.desc} style="color:{x.color}"><span class="inline-flex items-center gap-1"><Icon name={x.icon} size={13} />{x.label}</span></th>{/each}</tr></thead>
             <tbody>
               {#each mon as o, mi}
                 <tr class="cursor-pointer border-b border-line/60 last:border-0 hover:bg-raised/50 {mDrag && mi >= Math.min(...mDrag) && mi <= Math.max(...mDrag) ? 'bg-[#5b9cf6]/15' : monthIdx(o.t)[0] >= a && monthIdx(o.t)[1] <= b && b - a < last ? 'bg-raised' : ''} select-none" title="Click a month, or press and slide over months" onpointerdown={(e) => { if (e.button) return; e.preventDefault(); mDrag = [mi, mi]; mSpan(mi, mi); }} onpointerenter={() => { if (mDrag) { mDrag = [mDrag[0], mi]; mSpan(mDrag[0], mi); } }}>
                   <td class="whitespace-nowrap px-3 sm:px-4 py-2 text-ink-2">{month(o.t)} <span class="text-[10px] text-ink-3">{o.days}d</span></td>
-                  {#each growing as x}<td class="px-3 sm:px-4 py-2"><div class="flex items-center justify-end gap-2"><div class="hidden h-1 w-16 rounded-[2px] bg-sunken sm:block"><div class="h-1 rounded-[2px]" style="width:{(Math.max(0, o.sums[x.key] / o.days) / monMax[x.key]) * 100}%;background:{x.color}"></div></div><span class="num">{sgn(o.sums[x.key])}</span></div></td>{/each}
+                  {#each growing as x}<td class="px-3 py-2 {growing.length > 4 ? '' : 'sm:px-4'}"><div class="flex items-center justify-end gap-2"><div class="hidden h-1 {growing.length > 4 ? 'w-10 2xl:w-16' : 'w-16'} rounded-[2px] bg-sunken sm:block"><div class="h-1 rounded-[2px]" style="width:{(Math.max(0, o.n[x.key] ? o.sums[x.key] / o.n[x.key] : 0) / monMax[x.key]) * 100}%;background:{x.color}"></div></div><span class="num">{sgn(o.sums[x.key])}</span></div></td>{/each}
                 </tr>
               {/each}
             </tbody>
@@ -247,11 +251,11 @@
 
     <section id="milestones" class="panel">
       {@render head(7, "flag-outline", "Milestones", "30-day pace", "Next round number and its estimated date at the last-30-day pace.")}
-      <div class="grid gap-px bg-line sm:grid-cols-2 lg:grid-cols-4">
+      <div class="grid gap-px bg-line sm:grid-cols-2 {growing.length > 4 ? "xl:grid-cols-5" : "lg:grid-cols-4"}">
         {#each growing as x}
           {@const s = milestone(x)}
-          {@const from = s.prevAt ? ts.indexOf(s.prevAt) : 0}
-          <button class="bg-panel p-3 sm:p-4 text-left hover:bg-[#242424] hc:hover:bg-raised" title="Select from when {compact(s.prev)} was reached until now" onclick={() => select(from, last)}>
+          {@const from = s.prevAt ? ts.indexOf(s.prevAt) : x.first}
+          <button class="{growing.length % 2 && x === growing.at(-1) ? (growing.length > 4 ? 'sm:max-xl:col-span-2' : 'sm:max-lg:col-span-2') : ''} bg-panel p-3 sm:p-4 text-left hover:bg-[#242424] hc:hover:bg-raised" title="Select from when {compact(s.prev)} was reached until now" onclick={() => select(from, last)}>
             <div class="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.08em] text-ink-2"><span style="color:{x.color}"><Icon name={x.icon} size={14} /></span>{x.label}<span class="num ml-auto normal-case tracking-normal text-ink-3">{s.mult.toFixed(2)}×</span></div>
             <div class="num mt-2 text-[15px]">{compact(s.v1)} <span class="text-ink-3">→ {compact(s.next)}</span></div>
             <div class="my-2 h-1.5 rounded-[2px] bg-sunken"><div class="h-1.5 rounded-[2px]" style="width:{s.prog * 100}%;background:{x.color}"></div></div>
@@ -268,7 +272,7 @@
         <summary class="px-3 sm:px-4 py-2.5 text-[12px] text-ink-2 hover:text-ink"><span class="inline-block transition group-open:rotate-90">▸</span> Show table</summary>
         <div class="max-h-[60vh] overflow-auto border-t border-line">
           <table class="w-full text-[12px]">
-            <thead class="sticky top-0 bg-panel"><tr class="text-left font-mono text-[10px] uppercase tracking-wider text-ink-3"><th class="px-3 sm:px-4 py-2 font-normal"><button onclick={() => (sortDesc = !sortDesc)}>Date {sortDesc ? "↓" : "↑"}</button></th>{#each metrics as x}<th class="px-3 sm:px-4 py-2 text-right font-normal"><span class="inline-flex items-center gap-1"><span style="color:{x.color}"><Icon name={x.icon} size={13} /></span>{x.label}</span></th>{/each}</tr></thead>
+            <thead class="sticky top-0 bg-panel"><tr class="text-left font-mono text-[10px] uppercase tracking-wider text-ink-3"><th class="px-3 sm:px-4 py-2 font-normal"><button onclick={() => (sortDesc = !sortDesc)}>Date {sortDesc ? "↓" : "↑"}</button></th>{#each metrics as x}<th class="px-3 sm:px-4 py-2 text-right font-normal" title={x.desc}><span class="inline-flex items-center gap-1"><span style="color:{x.color}"><Icon name={x.icon} size={13} /></span>{x.label}</span></th>{/each}</tr></thead>
             <tbody>
               {#each tableRows as i}
                 <tr class="border-t border-line/50 hover:bg-raised/50"><td class="num px-3 sm:px-4 py-1 font-mono text-ink-2">{dates[i]}</td>{#each metrics as x}<td class="num px-3 sm:px-4 py-1 text-right">{fmt(x.v[i])}{#if x.ch[i]}<span class="ml-1 text-[10px] {x.ch[i] > 0 ? 'text-pos' : 'text-neg'}">{sgn(x.ch[i])}</span>{/if}</td>{/each}</tr>

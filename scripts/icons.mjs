@@ -2,7 +2,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 const set = JSON.parse(readFileSync(createRequire(import.meta.url).resolve("@iconify-json/material-symbols/icons.json")));
-const USED = ["dashboard-outline", "show-chart", "trending-up", "calendar-month-outline", "table-chart-outline", "star-outline", "flag-outline", "database-outline", "contrast", "download", "keyboard-outline", "push-pin-outline", "push-pin", "person-outline", "chat-outline", "rate-review-outline", "language", "category-outline", "chevron-left", "chevron-right", "percent", "add", "chat-info-outline", "chat-info"];
+const USED = ["dashboard-outline", "show-chart", "trending-up", "calendar-month-outline", "table-chart-outline", "star-outline", "flag-outline", "database-outline", "contrast", "download", "keyboard-outline", "push-pin-outline", "push-pin", "person-outline", "chat-outline", "rate-review-outline", "forum-outline", "language", "category-outline", "chevron-left", "chevron-right", "percent", "add", "chat-info-outline", "chat-info"];
 const out = {};
 for (const n of USED) {
   let ic = set.icons[n] ?? (set.aliases?.[n] && set.icons[set.aliases[n].parent]);

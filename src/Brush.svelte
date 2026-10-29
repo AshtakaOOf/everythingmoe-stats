@@ -8,9 +8,9 @@
   const x = (i) => (i / n) * w;
   const idx = (px) => Math.max(0, Math.min(n, Math.round((px / w) * n)));
   const uid = Math.random().toString(36).slice(2, 7);
-  const pts = $derived.by(() => { const lo = Math.min(...v), hi = Math.max(...v), r = hi - lo || 1; return v.map((y, i) => `${x(i).toFixed(1)},${(H - 2 - ((y - lo) / r) * (H - 6)).toFixed(1)}`); });
-  const line = $derived("M" + pts.join("L"));
-  const area = $derived.by(() => { const lo = Math.min(...v), hi = Math.max(...v), r = hi - lo || 1; return "M0," + H + v.map((y, i) => `L${x(i).toFixed(1)},${(H - 2 - ((y - lo) / r) * (H - 6)).toFixed(1)}`).join("") + `L${w},${H}Z`; });
+  const geo = $derived.by(() => { const f = v.filter(Number.isFinite), lo = Math.min(...f), hi = Math.max(...f), r = hi - lo || 1; const p = []; v.forEach((y, i) => { if (Number.isFinite(y)) p.push([x(i).toFixed(1), (H - 2 - ((y - lo) / r) * (H - 6)).toFixed(1)]); }); return p; });
+  const line = $derived(geo.length ? "M" + geo.map((q) => q.join(",")).join("L") : "");
+  const area = $derived(geo.length ? `M${geo[0][0]},${H}` + geo.map((q) => "L" + q.join(",")).join("") + `L${geo.at(-1)[0]},${H}Z` : "");
   function down(e) {
     const r = e.currentTarget.getBoundingClientRect(), px = e.clientX - r.left, i = idx(px);
     const near = (j) => Math.abs(x(j) - px) < (e.pointerType === "touch" ? 16 : 8);

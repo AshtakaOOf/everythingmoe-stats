@@ -1,7 +1,7 @@
 <script>
   // lightweight SVG line chart with hover
   import { ts, day, ticks, fmt } from "./lib.js";
-  let { series, a = 0, b = ts.length - 1, h = 220, bars = null, zero = false, unit = "", endLabels = false, onselect = null, notes = [] } = $props();
+  let { series, a = 0, b = ts.length - 1, h = 220, bars = null, zero = false, unit = "", endLabels = false, onselect = null, notes = [], from = 0, since = null } = $props();
   let sel = $state(null); // [start, end] while dragging
   let w = $state(600), hi = $state(null);
   const P = $derived({ l: 54, r: endLabels ? 66 : 14, t: 14, b: 28 });
@@ -10,6 +10,7 @@
   const ext = $derived.by(() => {
     let lo = Infinity, hi2 = -Infinity;
     for (const s of series) for (const i of idx) { const y = s.v[i]; if (Number.isFinite(y)) { lo = Math.min(lo, y); hi2 = Math.max(hi2, y); } }
+    if (lo > hi2) return [0, 1, true]; // nothing to show (range before the data starts)
     if (zero) lo = Math.min(0, lo);
     const pad = (hi2 - lo) * 0.06 || 1; return [lo - (zero && lo === 0 ? 0 : pad), hi2 + pad];
   });
@@ -19,11 +20,11 @@
   // end labels: avoid overlap
   const labelY = $derived.by(() => {
     if (!endLabels) return [];
-    const o = series.map((s, k) => ({ k, y: y(s.v[b]) })).sort((p, q) => p.y - q.y);
+    const o = series.map((s, k) => ({ k, y: y(s.v[b]) })).filter((e) => Number.isFinite(e.y)).sort((p, q) => p.y - q.y);
     for (let i = 1; i < o.length; i++) o[i].y = Math.max(o[i].y, o[i - 1].y + 12);
     const out = []; for (const e of o) out[e.k] = e.y; return out;
   });
-  const yt = $derived(ticks(ext[0], ext[1]));
+  const yt = $derived(ext[2] ? [] : ticks(ext[0], ext[1]));
   const xt = $derived.by(() => { const n = Math.max(2, Math.floor(w / 110)); const st = Math.max(1, Math.ceil(idx.length / n)); return idx.filter((_, k) => k % st === 0); });
   const vis = $derived.by(() => {
     let edge = -Infinity;
@@ -45,6 +46,7 @@
 <div class="relative select-none" bind:clientWidth={w}>
   <svg width={w} height={h} role="img" aria-label="chart" onpointermove={move} onpointerdown={down} onpointerup={up} onpointerleave={() => (hi = null)} class="block touch-pan-y {onselect ? 'cursor-crosshair' : ''}">
     {#if sel}{@const x0 = Math.min(x(sel[0]), x(sel[1]))}{@const x1 = Math.max(x(sel[0]), x(sel[1]))}<rect x={x0} width={x1 - x0} y={P.t} height={h - P.t} fill="#5b9cf6" opacity="0.18" /><line x1={x0} x2={x0} y1={P.t} y2={h} stroke="#5b9cf6" /><line x1={x1} x2={x1} y1={P.t} y2={h} stroke="#5b9cf6" />{#if Math.abs(sel[1] - sel[0]) >= 2}<text x={(x0 + x1) / 2} y={P.t + 10} text-anchor="middle" class="fill-ink font-mono text-[10px]">{day(ts[Math.min(...sel)], false)} – {day(ts[Math.max(...sel)], false)} ({Math.abs(sel[1] - sel[0])}d)</text>{/if}{/if}
+    {#if from > a}{@const x1 = from > b ? w - P.r : x(from)}<rect x={P.l} width={Math.max(0, x1 - P.l)} y={P.t} height={H - P.t - P.b} class="fill-sunken hc:fill-[#0a0a0a]" /><text x={(P.l + x1) / 2} y={(H - P.b + P.t) / 2} text-anchor="middle" class="fill-ink-3 font-mono text-[10px]">{x1 - P.l > 130 ? `no data${since ? " before " + since : ""}` : x1 - P.l > 50 ? "no data" : ""}</text>{/if}
     {#each yt as t}<line x1={P.l} x2={w - P.r} y1={y(t)} y2={y(t)} stroke={t === 0 ? "#3b3b3b" : "#2a2a2a"} class="hc:stroke-line-strong" /><text x={P.l - 10} y={y(t) + 3} text-anchor="end" class="fill-ink-3 font-mono text-[10px]">{Math.abs(t) >= 1e3 ? +(t / 1e3).toFixed(1) + "k" : t}{unit}</text>{/each}
     {#each xt as i}<text x={x(i)} y={H - 9} text-anchor="middle" class="fill-ink-3 font-mono text-[10px]">{day(ts[i], false)}</text>{/each}
     {#each vis as n}<g class="pointer-events-none"><title>{n.name} ({day(Date.parse(n.d))})</title><line x1={n.nx} x2={n.nx} y1={P.t - 4} y2={H - P.b} stroke-dasharray="2 3" class="stroke-[#e06c6c] {near.includes(n) ? 'opacity-90' : 'opacity-55'} hc:stroke-[#ff8f8f] hc:opacity-100" /><rect x={n.nx - 2.5} y={P.t - 9} width="5" height="5" transform="rotate(45 {n.nx} {P.t - 6.5})" class="fill-[#e06c6c] opacity-80 hc:fill-[#ff8f8f] hc:opacity-100" />{#if n.show}<text x={n.flip ? n.nx - 6 : n.nx + 6} y={P.t - 3} text-anchor={n.flip ? "end" : "start"} class="fill-[#d77b7b] font-mono text-[9px] opacity-90 hc:fill-[#ffa3a3] hc:opacity-100">{n.name}</text>{/if}</g>{/each}

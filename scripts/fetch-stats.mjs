@@ -70,7 +70,7 @@ if (!byDate.size) throw new Error("No stats data available");
 const rows = [...byDate].sort((a, b) => a[0].localeCompare(b[0]));
 const first = rows[0][0];
 const gaps = missing.filter((d) => d > first);
-const keys = ["users", "comments", "reviews", "entries", "category"];
+const keys = ["users", "comments", "reviews", "thread", "entries", "category"];
 const out = {
   builtAt: new Date().toISOString(), keys,
   dates: rows.map((r) => r[0]),
